@@ -8,23 +8,29 @@
 
 ## ⚡ 一键安装（推荐）
 
-在 Windows 电脑上打开 **PowerShell**，复制并执行以下命令即可全自动下载、安装并注册为后台自启服务：
+在 Windows 电脑上打开 **PowerShell**，复制并执行以下命令即可全自动安装：
 
-### 1. 交互式一键安装（推荐小白）
+### 1. 默认安装
 ```powershell
 irm https://raw.githubusercontent.com/binaryu/monitor-agent-win/main/install.ps1 | iex
 ```
-*(运行后会提示输入你的 Monitor 服务端 URL 和节点 Token，全程全自动配置)*
 
-### 2. 带参数一键静默安装（适合批量部署）
+### 2. 国内网络加速安装（推荐国内网络）
+若 GitHub 直连慢或下载失败，可直接使用加速代理通道：
 ```powershell
-& ([scriptblock]::Create((irm https://raw.githubusercontent.com/binaryu/monitor-agent-win/main/install.ps1))) -Server "https://hub.example.com" -Token "YOUR_NODE_TOKEN"
+irm https://gh-proxy.com/https://raw.githubusercontent.com/binaryu/monitor-agent-win/main/install.ps1 | iex
+```
+
+### 3. 带参数静默安装（支持指定代理与服务端参数）
+```powershell
+& ([scriptblock]::Create((irm https://gh-proxy.com/https://raw.githubusercontent.com/binaryu/monitor-agent-win/main/install.ps1))) -Server "https://hub.example.com" -Token "YOUR_NODE_TOKEN" -Proxy "https://gh-proxy.com"
 ```
 
 > **可选参数**：
 > - `-Server`: Monitor 仪表盘地址（如 `https://hub.example.com`）
 > - `-Token`: 节点 Token
 > - `-Interval`: 上报周期秒数（默认 `1`）
+> - `-Proxy`: 指定 GitHub 下载加速镜像（默认内置多节点自动重试故障转移）
 > - `-Insecure`: 若服务端为纯 HTTP/WS（未配置 SSL 证书）时加此开关
 
 ---

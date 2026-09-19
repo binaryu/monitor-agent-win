@@ -4,6 +4,7 @@ param (
     [string]$Token = "",
     [int]$Interval = 1,
     [switch]$Insecure,
+    [string]$Proxy = "",
     [string]$InstallDir = "$env:ProgramFiles\MonitorAgent",
     [string]$Version = "latest"
 )
@@ -17,6 +18,7 @@ if (-not $isAdmin) {
     if ($Token) { $argsList += " -Token `"$Token`"" }
     if ($Interval) { $argsList += " -Interval $Interval" }
     if ($Insecure) { $argsList += " -Insecure" }
+    if ($Proxy) { $argsList += " -Proxy `"$Proxy`"" }
     
     Start-Process powershell.exe -ArgumentList $argsList -Verb RunAs
     exit
@@ -41,28 +43,62 @@ $arch = if ($env:PROCESSOR_ARCHITECTURE -eq "ARM64") { "arm64" } else { "x86_64"
 $assetName = "monitor-agent-windows-$arch.zip"
 Write-Host "`n[*] 系统架构: $arch" -ForegroundColor Gray
 
-# 4. 下载最新二进制文件
+# 4. 下载逻辑（支持 GitHub 代理加速与多节点自动 Fallback）
 $repo = "binaryu/monitor-agent-win"
-$zipUrl = if ($Version -eq "latest") {
+$rawZipUrl = if ($Version -eq "latest") {
     "https://github.com/$repo/releases/latest/download/$assetName"
 } else {
     "https://github.com/$repo/releases/download/$Version/$assetName"
 }
 
-Write-Host "[*] 正在从 GitHub 下载最新版本..." -ForegroundColor Gray
-Write-Host "    $zipUrl" -ForegroundColor DarkGray
+# 候选加速代理节点列表
+$proxyCandidates = @(
+    "https://gh-proxy.com/",
+    "https://ghproxy.net/",
+    "https://mirror.ghproxy.com/"
+)
+
+$downloadUrls = [System.Collections.Generic.List[string]]::new()
+
+# 如果用户指定了代理前缀
+if (-not [string]::IsNullOrWhiteSpace($Proxy)) {
+    $p = $Proxy.TrimEnd('/') + '/'
+    $downloadUrls.Add("$p$rawZipUrl")
+}
+
+# 默认直连地址
+$downloadUrls.Add($rawZipUrl)
+
+# 自动加入备选代理节点
+foreach ($cand in $proxyCandidates) {
+    $downloadUrls.Add("$cand$rawZipUrl")
+}
 
 $tempZip = Join-Path $env:TEMP $assetName
-try {
-    [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12 -bor [Net.SecurityProtocolType]::Tls13
-    Invoke-WebRequest -Uri $zipUrl -OutFile $tempZip -UseBasicParsing
-} catch {
-    Write-Error "[x] 下载失败: $_. 请检查网络连接或 GitHub 访问情况。"
+[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12 -bor [Net.SecurityProtocolType]::Tls13
+
+$downloadSuccess = $false
+foreach ($url in $downloadUrls) {
+    try {
+        Write-Host "[*] 正在尝试下载: $url" -ForegroundColor Gray
+        Invoke-WebRequest -Uri $url -OutFile $tempZip -UseBasicParsing -TimeoutSec 15
+        if ((Test-Path $tempZip) -and ((Get-Item $tempZip).Length -gt 1000)) {
+            $downloadSuccess = $true
+            Write-Host "[✓] 下载完成！" -ForegroundColor Green
+            break
+        }
+    } catch {
+        Write-Host "[!] 当前节点下载失败，正在切换下一节点..." -ForegroundColor DarkYellow
+    }
+}
+
+if (-not $downloadSuccess) {
+    Write-Error "[x] 所有下载节点均失败，请检查网络连接或手动指定 -Proxy 参数！"
     Read-Host "按回车键退出..."
     exit 1
 }
 
-# 5. 停止旧进程并安装到目标目录
+# 5. 停止旧进程并解压安装到目标目录
 Stop-Process -Name "monitor-agent" -Force -ErrorAction SilentlyContinue
 
 if (-not (Test-Path $InstallDir)) {
@@ -109,8 +145,7 @@ if ($proc) {
     Write-Host "安装路径: $InstallDir"
     Write-Host "日志文件: $InstallDir\agent.log"
 } else {
-    Write-Host "`n[!] 计划任务已创建，但正在启动中或需要手动排查。" -ForegroundColor Yellow
-    Write-Host "你可以尝试在安装目录下直接运行测试: $exePath $Arguments"
+    Write-Host "`n[!] 计划任务已创建，请检查日志: $InstallDir\agent.log" -ForegroundColor Yellow
 }
 
 Write-Host "`n[提示] 如需卸载，可随时运行:" -ForegroundColor Gray
