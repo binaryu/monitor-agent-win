@@ -1,0 +1,29 @@
+[package]
+name = "monitor-agent"
+version = "1.0.0"
+edition = "2021"
+license = "MIT"
+description = "Windows & Cross-platform monitoring agent for monitor-probe hub"
+repository = "https://github.com/binaryu/monitor-agent-win"
+
+[dependencies]
+anyhow = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["rt", "macros", "net", "time", "sync", "io-util"] }
+tokio-tungstenite = { version = "0.28", default-features = false, features = ["connect", "rustls-tls-webpki-roots"] }
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
+futures-util = { version = "0.3", default-features = false, features = ["sink"] }
+if-addrs = "0.15"
+sysinfo = "0.33"
+netstat2 = "0.11"
+
+[dev-dependencies]
+tokio = { version = "1", features = ["test-util"] }
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = "z"
+panic = "abort"
+strip = true
