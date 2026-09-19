@@ -43,7 +43,7 @@ $arch = if ($env:PROCESSOR_ARCHITECTURE -eq "ARM64") { "arm64" } else { "x86_64"
 $assetName = "monitor-agent-windows-$arch.zip"
 Write-Host "`n[*] 系统架构: $arch" -ForegroundColor Gray
 
-# 4. 下载逻辑（默认自动优先走 GitHub 代理镜像加速）
+# 4. 下载逻辑（首选代理加速下载）
 $repo = "binaryu/monitor-agent-win"
 $rawZipUrl = if ($Version -eq "latest") {
     "https://github.com/$repo/releases/latest/download/$assetName"
@@ -51,31 +51,16 @@ $rawZipUrl = if ($Version -eq "latest") {
     "https://github.com/$repo/releases/download/$Version/$assetName"
 }
 
-# 代理加速源（默认优先排在前面，免去用户手动指定）
-$proxyCandidates = @(
-    "https://gh-proxy.com/",
-    "https://mirror.ghproxy.com/",
-    "https://ghproxy.net/"
+# 第一候选直接就是带 gh-proxy.com 加速前缀的 URL
+$proxyPrefix = if ([string]::IsNullOrWhiteSpace($Proxy)) { "https://gh-proxy.com/" } else { $Proxy.TrimEnd('/') + '/' }
+
+$downloadUrls = @(
+    "$proxyPrefix$rawZipUrl",
+    "https://gh-proxy.com/$rawZipUrl",
+    "https://mirror.ghproxy.com/$rawZipUrl",
+    "https://ghproxy.net/$rawZipUrl",
+    $rawZipUrl
 )
-
-$downloadUrls = [System.Collections.Generic.List[string]]::new()
-
-# 如果用户自定义了 Proxy，放第一位
-if (-not [string]::IsNullOrWhiteSpace($Proxy)) {
-    $p = $Proxy.TrimEnd('/') + '/'
-    $downloadUrls.Add("$p$rawZipUrl")
-}
-
-# 默认优先加入加速代理源
-foreach ($cand in $proxyCandidates) {
-    $fullUrl = "$cand$rawZipUrl"
-    if (-not $downloadUrls.Contains($fullUrl)) {
-        $downloadUrls.Add($fullUrl)
-    }
-}
-
-# 最后兜底直连
-$downloadUrls.Add($rawZipUrl)
 
 $tempZip = Join-Path $env:TEMP $assetName
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12 -bor [Net.SecurityProtocolType]::Tls13
@@ -83,15 +68,15 @@ $tempZip = Join-Path $env:TEMP $assetName
 $downloadSuccess = $false
 foreach ($url in $downloadUrls) {
     try {
-        Write-Host "[*] 正在下载: $url" -ForegroundColor Gray
-        Invoke-WebRequest -Uri $url -OutFile $tempZip -UseBasicParsing -TimeoutSec 15
+        Write-Host "[*] 正在通过加速源下载: $url" -ForegroundColor Gray
+        Invoke-WebRequest -Uri $url -OutFile $tempZip -UseBasicParsing -TimeoutSec 20
         if ((Test-Path $tempZip) -and ((Get-Item $tempZip).Length -gt 1000)) {
             $downloadSuccess = $true
             Write-Host "[✓] 下载完成！" -ForegroundColor Green
             break
         }
     } catch {
-        Write-Host "[!] 当前线路失败，尝试下一条线路..." -ForegroundColor DarkYellow
+        Write-Host "[!] 当前线路超时或失败，正在尝试备用线路..." -ForegroundColor DarkYellow
     }
 }
 
