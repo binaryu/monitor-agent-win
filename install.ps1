@@ -4,7 +4,7 @@ param (
     [string]$Token = "",
     [int]$Interval = 1,
     [switch]$Insecure,
-    [string]$Proxy = "",
+    [string]$Proxy = "https://gh-proxy.com",
     [string]$InstallDir = "$env:ProgramFiles\MonitorAgent",
     [string]$Version = "latest"
 )
@@ -43,7 +43,7 @@ $arch = if ($env:PROCESSOR_ARCHITECTURE -eq "ARM64") { "arm64" } else { "x86_64"
 $assetName = "monitor-agent-windows-$arch.zip"
 Write-Host "`n[*] 系统架构: $arch" -ForegroundColor Gray
 
-# 4. 下载逻辑（支持 GitHub 代理加速与多节点自动 Fallback）
+# 4. 下载逻辑（默认自动优先走 GitHub 代理镜像加速）
 $repo = "binaryu/monitor-agent-win"
 $rawZipUrl = if ($Version -eq "latest") {
     "https://github.com/$repo/releases/latest/download/$assetName"
@@ -51,28 +51,31 @@ $rawZipUrl = if ($Version -eq "latest") {
     "https://github.com/$repo/releases/download/$Version/$assetName"
 }
 
-# 候选加速代理节点列表
+# 代理加速源（默认优先排在前面，免去用户手动指定）
 $proxyCandidates = @(
     "https://gh-proxy.com/",
-    "https://ghproxy.net/",
-    "https://mirror.ghproxy.com/"
+    "https://mirror.ghproxy.com/",
+    "https://ghproxy.net/"
 )
 
 $downloadUrls = [System.Collections.Generic.List[string]]::new()
 
-# 如果用户指定了代理前缀
+# 如果用户自定义了 Proxy，放第一位
 if (-not [string]::IsNullOrWhiteSpace($Proxy)) {
     $p = $Proxy.TrimEnd('/') + '/'
     $downloadUrls.Add("$p$rawZipUrl")
 }
 
-# 默认直连地址
-$downloadUrls.Add($rawZipUrl)
-
-# 自动加入备选代理节点
+# 默认优先加入加速代理源
 foreach ($cand in $proxyCandidates) {
-    $downloadUrls.Add("$cand$rawZipUrl")
+    $fullUrl = "$cand$rawZipUrl"
+    if (-not $downloadUrls.Contains($fullUrl)) {
+        $downloadUrls.Add($fullUrl)
+    }
 }
+
+# 最后兜底直连
+$downloadUrls.Add($rawZipUrl)
 
 $tempZip = Join-Path $env:TEMP $assetName
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12 -bor [Net.SecurityProtocolType]::Tls13
@@ -80,7 +83,7 @@ $tempZip = Join-Path $env:TEMP $assetName
 $downloadSuccess = $false
 foreach ($url in $downloadUrls) {
     try {
-        Write-Host "[*] 正在尝试下载: $url" -ForegroundColor Gray
+        Write-Host "[*] 正在下载: $url" -ForegroundColor Gray
         Invoke-WebRequest -Uri $url -OutFile $tempZip -UseBasicParsing -TimeoutSec 15
         if ((Test-Path $tempZip) -and ((Get-Item $tempZip).Length -gt 1000)) {
             $downloadSuccess = $true
@@ -88,12 +91,12 @@ foreach ($url in $downloadUrls) {
             break
         }
     } catch {
-        Write-Host "[!] 当前节点下载失败，正在切换下一节点..." -ForegroundColor DarkYellow
+        Write-Host "[!] 当前线路失败，尝试下一条线路..." -ForegroundColor DarkYellow
     }
 }
 
 if (-not $downloadSuccess) {
-    Write-Error "[x] 所有下载节点均失败，请检查网络连接或手动指定 -Proxy 参数！"
+    Write-Error "[x] 所有下载线路均失败，请检查网络！"
     Read-Host "按回车键退出..."
     exit 1
 }
@@ -149,7 +152,7 @@ if ($proc) {
 }
 
 Write-Host "`n[提示] 如需卸载，可随时运行:" -ForegroundColor Gray
-Write-Host "  irm https://raw.githubusercontent.com/$repo/main/uninstall.ps1 | iex" -ForegroundColor Yellow
+Write-Host "  irm https://gh-proxy.com/https://raw.githubusercontent.com/$repo/main/uninstall.ps1 | iex" -ForegroundColor Yellow
 
 if (-not $env:CI) {
     Start-Sleep -Seconds 3
