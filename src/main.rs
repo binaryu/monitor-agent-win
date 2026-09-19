@@ -15,6 +15,21 @@ use tokio_tungstenite::tungstenite::protocol::WebSocketConfig;
 use tokio_tungstenite::tungstenite::{Error as WsError, Message};
 
 use collect::Collector;
+use std::fs::OpenOptions;
+use std::io::Write;
+
+fn log(msg: impl std::fmt::Display) {
+    let text = msg.to_string();
+    eprintln!("{text}");
+    if let Ok(exe_path) = std::env::current_exe() {
+        if let Some(dir) = exe_path.parent() {
+            let log_file = dir.join("agent.log");
+            if let Ok(mut f) = OpenOptions::new().create(true).append(true).open(log_file) {
+                let _ = writeln!(f, "{text}");
+            }
+        }
+    }
+}
 
 struct Args {
     server: String,
@@ -142,7 +157,7 @@ async fn main() -> Result<()> {
     loop {
         let mut connected = None;
         if let Err(e) = session(&url, &args.token, &mut collector, args.interval, &mut connected).await {
-            eprintln!("session ended: {e:#}");
+            log(format!("session ended: {e:#}"));
         }
         wait = reconnect_wait(wait, connected.map_or(Duration::ZERO, |t: Instant| t.elapsed()));
         tokio::time::sleep(Duration::from_secs(wait)).await;
@@ -197,7 +212,7 @@ async fn session(
     let (mut ws, peer) = tokio::time::timeout(CONNECT_DEADLINE, connect)
         .await
         .with_context(|| format!("no connection after {}s", CONNECT_DEADLINE.as_secs()))??;
-    eprintln!("connected to {peer}");
+    log(format!("connected to {peer}"));
     *connected = Some(Instant::now());
 
     let mut last_frame = Instant::now();
@@ -286,7 +301,7 @@ fn respawn_ping_tasks(
     tx: &mpsc::Sender<Message>,
 ) {
     if wanted.len() > MAX_PING_TASKS {
-        eprintln!("hub asked for {} ping tasks, running {MAX_PING_TASKS}", wanted.len());
+        log(format!("hub asked for {} ping tasks, running {MAX_PING_TASKS}", wanted.len()));
         wanted.truncate(MAX_PING_TASKS);
     }
     running.retain(|(task, handle)| {
@@ -310,11 +325,11 @@ fn respawn_ping_tasks(
                 ticker.tick().await;
                 let Some(latency) = tcp_ping(&spawned.target).await else {
                     if !std::mem::replace(&mut said, true) {
-                        eprintln!(
+                        log(format!(
                             "{}: name resolution runs past {}ms",
                             spawned.target,
                             HANDSHAKE_DEADLINE.as_millis()
-                        );
+                        ));
                     }
                     continue;
                 };

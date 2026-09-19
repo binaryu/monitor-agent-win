@@ -1,4 +1,4 @@
-# PowerShell 脚本: 注册 Monitor Agent 为 Windows 开机自启后台任务 (免黑框窗口)
+# PowerShell 离线安装与服务注册脚本
 param (
     [string]$Server = "",
     [string]$Token = "",
@@ -6,10 +6,9 @@ param (
     [switch]$Insecure
 )
 
-# 确保以管理员权限运行
 $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 if (-not $isAdmin) {
-    Write-Error "请以管理员身份运行 PowerShell 执行此安装脚本！"
+    Write-Error "请以管理员身份运行 PowerShell 执行此脚本！"
     exit 1
 }
 
@@ -21,17 +20,13 @@ if (-not (Test-Path $ExePath)) {
     exit 1
 }
 
-# 检查/提示输入参数
-if ([string]::IsNullOrWhiteSpace($Server)) {
+while ([string]::IsNullOrWhiteSpace($Server)) {
     $Server = Read-Host "请输入 Monitor 服务端地址 (例如 https://hub.example.com)"
+    $Server = $Server.Trim()
 }
-if ([string]::IsNullOrWhiteSpace($Token)) {
+while ([string]::IsNullOrWhiteSpace($Token)) {
     $Token = Read-Host "请输入节点 Token"
-}
-
-if ([string]::IsNullOrWhiteSpace($Server) -or [string]::IsNullOrWhiteSpace($Token)) {
-    Write-Error "Server 和 Token 不能为空！"
-    exit 1
+    $Token = $Token.Trim()
 }
 
 $Arguments = "--server `"$Server`" --token `"$Token`" --interval $Interval"
@@ -41,18 +36,24 @@ if ($Insecure) {
 
 $TaskName = "MonitorAgent"
 
-# 如果已存在旧任务则先注销
+Stop-Process -Name "monitor-agent" -Force -ErrorAction SilentlyContinue
 Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false -ErrorAction SilentlyContinue
 
-# 创建计划任务：开机自启、SYSTEM 权限、后台静默运行
-$Action = New-ScheduledTaskAction -Execute "cmd.exe" -Argument "/c `"`"$ExePath`" $Arguments >> `"`"$CurrentDir\agent.log`"`" 2>&1`"" -WorkingDirectory $CurrentDir
+$Action = New-ScheduledTaskAction -Execute $ExePath -Argument $Arguments -WorkingDirectory $CurrentDir
 $Trigger = New-ScheduledTaskTrigger -AtStartup
 $Principal = New-ScheduledTaskPrincipal -UserId "NT AUTHORITY\SYSTEM" -LogonType ServiceAccount -RunLevel Highest
-$Settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1) -ExecutionTimeLimit 0
+$Settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1) -ExecutionTimeLimit 0 -StartWhenAvailable
 
 Register-ScheduledTask -TaskName $TaskName -Action $Action -Trigger $Trigger -Principal $Principal -Settings $Settings | Out-Null
 Start-ScheduledTask -TaskName $TaskName
 
-Write-Host "`n[✓] Monitor Agent 已成功注册为 Windows 系统后台任务并立即启动！" -ForegroundColor Green
-Write-Host "任务名称: $TaskName"
-Write-Host "如需停止或卸载，可运行 .\uninstall-service.ps1"
+Start-Sleep -Seconds 2
+$proc = Get-Process -Name "monitor-agent" -ErrorAction SilentlyContinue
+
+if ($proc) {
+    Write-Host "`n[✓] Monitor Agent 已成功注册为 Windows 系统后台任务并立即运行！" -ForegroundColor Green
+    Write-Host "进程 PID: $($proc.Id)"
+    Write-Host "日志文件: $CurrentDir\agent.log"
+} else {
+    Write-Host "`n[!] 任务已创建，请检查 $CurrentDir\agent.log 查看日志。" -ForegroundColor Yellow
+}
