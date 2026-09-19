@@ -45,7 +45,7 @@ $TaskName = "MonitorAgent"
 Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false -ErrorAction SilentlyContinue
 
 # 创建计划任务：开机自启、SYSTEM 权限、后台静默运行
-$Action = New-ScheduledTaskAction -Execute $ExePath -Argument $Arguments -WorkingDirectory $CurrentDir
+$Action = New-ScheduledTaskAction -Execute "cmd.exe" -Argument "/c `"`"$ExePath`" $Arguments >> `"`"$CurrentDir\agent.log`"`" 2>&1`"" -WorkingDirectory $CurrentDir
 $Trigger = New-ScheduledTaskTrigger -AtStartup
 $Principal = New-ScheduledTaskPrincipal -UserId "NT AUTHORITY\SYSTEM" -LogonType ServiceAccount -RunLevel Highest
 $Settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1) -ExecutionTimeLimit 0

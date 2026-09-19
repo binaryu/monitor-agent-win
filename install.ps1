@@ -90,7 +90,7 @@ if ($Insecure) {
     $Arguments += " --insecure"
 }
 
-$Action = New-ScheduledTaskAction -Execute $exePath -Argument $Arguments -WorkingDirectory $InstallDir
+$Action = New-ScheduledTaskAction -Execute "cmd.exe" -Argument "/c `"`"$exePath`" $Arguments >> `"`"$InstallDir\agent.log`"`" 2>&1`"" -WorkingDirectory $InstallDir
 $Trigger = New-ScheduledTaskTrigger -AtStartup
 $Principal = New-ScheduledTaskPrincipal -UserId "NT AUTHORITY\SYSTEM" -LogonType ServiceAccount -RunLevel Highest
 $Settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1) -ExecutionTimeLimit 0
