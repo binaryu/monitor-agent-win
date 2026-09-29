@@ -3,6 +3,7 @@ param (
     [string]$Server = "",
     [string]$Token = "",
     [int]$Interval = 1,
+    [string]$Iface = "",
     [switch]$Insecure,
     [string]$Proxy = "https://gh-proxy.com",
     [string]$InstallDir = "$env:ProgramFiles\MonitorAgent",
@@ -17,6 +18,7 @@ if (-not $isAdmin) {
     if ($Server) { $argsList += " -Server `"$Server`"" }
     if ($Token) { $argsList += " -Token `"$Token`"" }
     if ($Interval) { $argsList += " -Interval $Interval" }
+    if ($Iface) { $argsList += " -Iface `"$Iface`"" }
     if ($Insecure) { $argsList += " -Insecure" }
     if ($Proxy) { $argsList += " -Proxy `"$Proxy`"" }
     
@@ -109,6 +111,9 @@ $TaskName = "MonitorAgent"
 Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false -ErrorAction SilentlyContinue
 
 $Arguments = "--server `"$Server`" --token `"$Token`" --interval $Interval"
+if ($Iface) {
+    $Arguments += " --iface `"$Iface`""
+}
 if ($Insecure) {
     $Arguments += " --insecure"
 }

@@ -30,6 +30,7 @@ irm https://gh-proxy.com/https://raw.githubusercontent.com/binaryu/monitor-agent
 > - `-Server`: Monitor 仪表盘地址（如 `https://hub.example.com`）
 > - `-Token`: 节点 Token
 > - `-Interval`: 上报周期秒数（默认 `1`）
+> - `-Iface`: 指定仅统计指定网卡流量（逗号分隔，如 `"以太网,Wi-Fi"`，支持 `-网卡名` 排除）
 > - `-Proxy`: 指定 GitHub 下载加速镜像（默认内置多节点自动重试故障转移）
 > - `-Insecure`: 若服务端为纯 HTTP/WS（未配置 SSL 证书）时加此开关
 
@@ -61,6 +62,8 @@ irm https://raw.githubusercontent.com/binaryu/monitor-agent-win/main/uninstall.p
 解压后直接在终端中运行：
 ```powershell
 .\monitor-agent.exe --server https://hub.example.com --token YOUR_NODE_TOKEN
+# 或指定统计特定网卡流量
+.\monitor-agent.exe --server https://hub.example.com --token YOUR_NODE_TOKEN --iface "以太网"
 ```
 
 ---

@@ -3,6 +3,7 @@ param (
     [string]$Server = "",
     [string]$Token = "",
     [int]$Interval = 1,
+    [string]$Iface = "",
     [switch]$Insecure
 )
 
@@ -30,6 +31,9 @@ while ([string]::IsNullOrWhiteSpace($Token)) {
 }
 
 $Arguments = "--server `"$Server`" --token `"$Token`" --interval $Interval"
+if ($Iface) {
+    $Arguments += " --iface `"$Iface`""
+}
 if ($Insecure) {
     $Arguments += " --insecure"
 }
